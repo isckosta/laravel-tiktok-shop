@@ -1,0 +1,44 @@
+{
+    "name": "isckosta/laravel-tiktok-shop",
+    "description": "Laravel integration for TikTok Shop (multi-tenant, webhooks, DTOs, retries).",
+    "type": "library",
+    "license": "MIT",
+    "require": {
+      "php": "^8.3",
+      "illuminate/support": "^11.0|^12.0",
+      "illuminate/http": "^11.0|^12.0",
+      "illuminate/database": "^11.0|^12.0",
+      "illuminate/console": "^11.0|^12.0",
+      "illuminate/routing": "^11.0|^12.0"
+    },
+    "require-dev": {
+        "pestphp/pest": "^3.0",
+        "pestphp/pest-plugin-laravel": "^3.0",
+        "mockery/mockery": "^1.6"
+    },
+    "autoload": {
+      "psr-4": {
+        "TikTokShop\\": "src/"
+      }
+    },
+    "scripts": {
+        "test": "pest"
+    },
+    "extra": {
+      "laravel": {
+        "providers": [
+          "TikTokShop\\TikTokShopServiceProvider"
+        ],
+        "aliases": {
+          "TikTokShop": "TikTokShop\\Facades\\TikTokShop"
+        }
+      }
+    },
+    "minimum-stability": "dev",
+    "prefer-stable": true,
+    "config": {
+        "allow-plugins": {
+            "pestphp/pest-plugin": true
+        }
+    }
+}
