@@ -6,7 +6,6 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use TikTokShop\Models\TikTokShopCredential;
 use TikTokShop\Repositories\CredentialsRepositoryInterface;
-use TikTokShop\Auth\TokenResult;
 use TikTokShop\Support\Signer;
 
 class TokenService
@@ -18,36 +17,49 @@ class TokenService
      */
     public function exchangeAuthorizedCode(string $authCode): TokenResult
     {
-        $resp = Http::get('https://auth.tiktok-shops.com/api/v2/token/get', [
-            'grant_type' => 'authorized_code',
-            'auth_code'  => $authCode,
-            'app_key'    => config('tiktokshop.auth.app_key'),
-            'app_secret' => config('tiktokshop.auth.app_secret'),
-        ])->json();
+        try {
 
-        Log::info('Resposta da API de autenticação TikTok Shop', ['response' => $resp]);
+            $resp = Http::get('https://auth.tiktok-shops.com/api/v2/token/get', [
+                'grant_type' => 'authorized_code',
+                'auth_code'  => $authCode,
+                'app_key'    => config('tiktokshop.auth.app_key'),
+                'app_secret' => config('tiktokshop.auth.app_secret'),
+            ])->json();
 
-        if (! isset($resp['data']['access_token'])) {
-            throw new \RuntimeException('Falha ao obter access_token: ' . json_encode($resp));
+            if (! isset($resp['data']['access_token'])) {
+                $code = $resp['code'] ?? null;
+
+                if ((int) $code === 36004004) {
+                    throw new \DomainException('A loja já foi autorizada anteriormente.');
+                }
+
+                throw new \RuntimeException('Falha ao obter access_token: ' . json_encode($resp));
+            }
+
+            $data = $resp['data'];
+            $accessToken = $data['access_token'];
+
+            $authorizedShops = $this->fetchAuthorizedShopsFromApi($accessToken);
+
+            $shopCipher      = $authorizedShops[0]['cipher']      ?? null;
+            $shopCode        = $authorizedShops[0]['code']        ?? null;
+            $shopId          = $authorizedShops[0]['id']          ?? null;
+            $shopName        = $authorizedShops[0]['name']        ?? null;
+            $shopRegion      = $authorizedShops[0]['region']      ?? null;
+            $shopSellerType  = $authorizedShops[0]['seller_type'] ?? null;
+
+            return $this->mapTokenResult(array_merge($data, [
+                'shop_cipher' => $shopCipher,
+                'shop_code'   => $shopCode,
+                'shop_id'     => $shopId,
+                'shop_name'   => $shopName,
+                'shop_region' => $shopRegion,
+                'shop_seller_type' => $shopSellerType,
+            ]));
+        } catch (\Exception $e) {
+            Log::error('Erro ao obter token do TikTok Shop', ['error' => $e->getMessage()]);
+            throw $e;
         }
-
-        $data = $resp['data'];
-        $accessToken = $data['access_token'];
-
-        // 🔹 Buscar o shop_cipher obrigatoriamente via /authorization/shops
-        $authorizedShops = $this->fetchAuthorizedShopsFromApi($accessToken);
-        $shopCipher = $authorizedShops[0]['cipher'] ?? null;
-
-        if (! $shopCipher) {
-            Log::error('Nenhum shop_cipher retornado pelo Get Authorized Shops API', [
-                'response' => $authorizedShops,
-            ]);
-            throw new \RuntimeException('shop_cipher não retornado pela TikTok Shop.');
-        }
-
-        return $this->mapTokenResult(array_merge($data, [
-            'shop_cipher_resolved' => $shopCipher,
-        ]));
     }
 
     /**
@@ -74,6 +86,11 @@ class TokenService
             'app_key'                 => config('tiktokshop.auth.app_key'),
             'app_secret'              => config('tiktokshop.auth.app_secret'),
             'shop_cipher'             => $token->shopCipher,
+            'shop_code'               => $token->shopCode,
+            'shop_id'                 => $token->shopId,
+            'shop_name'               => $token->shopName,
+            'shop_region'             => $token->shopRegion,
+            'shop_seller_type'        => $token->shopSellerType,
             'access_token'            => $token->accessToken,
             'refresh_token'           => $token->refreshToken,
             'access_token_expires_at' => $token->accessTokenExpiresAt,
@@ -112,6 +129,8 @@ class TokenService
             'Content-Type'       => 'application/json',
         ])->get("https://open-api.tiktokglobalshop.com{$pathname}", array_merge($query, ['sign' => $sign]));
 
+        Log::info('Resposta da API de autorização TikTok Shop: Shops', ['response' => $response->json()]);
+
         if ($response->failed()) {
             \Log::error('Falha ao buscar lojas autorizadas', [
                 'status'   => $response->status(),
@@ -131,9 +150,12 @@ class TokenService
         $accessToken = $data['access_token'] ?? null;
         $refreshToken = $data['refresh_token'] ?? null;
 
-        $accessExpires = now()->addSeconds((int)($data['access_token_expire_in'] ?? 7200));
+        $accessExpires = isset($data['access_token_expire_in'])
+            ? \Carbon\Carbon::createFromTimestamp((int)$data['access_token_expire_in'])
+            : now()->addSeconds(7200);
+
         $refreshExpires = isset($data['refresh_token_expire_in'])
-            ? now()->addSeconds((int)$data['refresh_token_expire_in'])
+            ? \Carbon\Carbon::createFromTimestamp((int)$data['refresh_token_expire_in'])
             : null;
 
         return new TokenResult(
@@ -142,7 +164,12 @@ class TokenService
             accessTokenExpiresAt: $accessExpires,
             refreshTokenExpiresAt: $refreshExpires,
             openId: $data['open_id'] ?? null,
-            shopCipher: $data['shop_cipher_resolved'] ?? null,
+            shopCipher: $data['shop_cipher'] ?? null,
+            shopCode: $data['shop_code'] ?? null,
+            shopId: $data['shop_id'] ?? null,
+            shopName: $data['shop_name'] ?? null,
+            shopRegion: $data['shop_region'] ?? null,
+            shopSellerType: $data['shop_seller_type'] ?? null,
             sellerName: $data['seller_name'] ?? null,
             sellerRegion: $data['seller_base_region'] ?? null,
             userType: $data['user_type'] ?? null,
