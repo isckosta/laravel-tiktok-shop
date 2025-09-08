@@ -309,4 +309,9 @@ class Products
     {
         return new DiagnoseProductIssues($this->http);
     }
+
+    public function seoWords(): GetProductsSeoWords
+    {
+        return new GetProductsSeoWords($this->http);
+    }
 }
