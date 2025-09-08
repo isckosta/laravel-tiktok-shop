@@ -8,7 +8,9 @@ use TikTokShop\Services\AuthorizationService;
 
 class AuthorizationController extends Controller
 {
-    public function __construct(private AuthorizationService $authService) {}
+    public function __construct(private AuthorizationService $authService)
+    {
+    }
 
     public function redirect()
     {
@@ -18,13 +20,21 @@ class AuthorizationController extends Controller
 
     public function callback(Request $request)
     {
-        $authCode = (string) $request->query('code');
-        $state    = (string) $request->query('state');
+        $authCode = (string)$request->query('code');
+        $state    = (string)$request->query('state');
 
         abort_unless($authCode, 400, 'Missing auth_code.');
 
         $result = $this->authService->handleCallback($authCode, $state);
 
-        return response()->json($result);
+        if ($result['status'] === 'already_authorized') {
+            return view('tiktokshop::tiktok.already-authorized', [
+                'storeName' => $result['shop_name'] ?? null
+            ]);
+        }
+
+        return view('tiktokshop::tiktok.thank-you', [
+            'storeName' => $result['shop_name'] ?? null
+        ]);
     }
 }
