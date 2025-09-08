@@ -11,6 +11,11 @@ return new class extends Migration {
             $table->id();
             $table->string('client_hash')->index();
             $table->string('shop_cipher')->nullable();
+            $table->string('shop_code')->nullable();
+            $table->string('shop_id')->nullable();
+            $table->string('shop_name')->nullable();
+            $table->string('shop_region')->nullable();
+            $table->string('shop_seller_type')->nullable();
             $table->string('app_key');
             $table->string('app_secret');
             $table->text('access_token')->nullable();
