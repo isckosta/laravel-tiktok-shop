@@ -16,7 +16,7 @@ class AuthorizeCommand extends Command
         $clientHash = $this->argument('client_hash');
         $serviceId  = config('tiktokshop.auth.service_id');
         $appKey     = config('tiktokshop.auth.app_key');
-        $redirect   = config('tiktokshop.auth.redirect_uri');
+        $redirect = config('tiktokshop.auth.redirect_uri');
         $authBase   = rtrim(config('tiktokshop.auth.base_uri'), '/');
 
         if (! $serviceId || ! $redirect || ! $appKey) {
@@ -29,7 +29,7 @@ class AuthorizeCommand extends Command
 
         $url = "{$authBase}/oauth/authorize"
             . "?service_id={$serviceId}"
-            . "&app_key={$appKey}" // ✅ INCLUIR AQUI
+            . "&app_key={$appKey}"
             . "&state={$state}"
             . "&redirect_uri=" . urlencode($redirect);
 
