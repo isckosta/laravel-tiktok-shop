@@ -11,8 +11,21 @@ use TikTokShop\Support\Signer;
 use TikTokShop\Repositories\CredentialsRepositoryInterface;
 use TikTokShop\Auth\TokenService;
 
+/**
+ * HTTP Client para comunicação autenticada com a API da TikTok Shop.
+ *
+ * Responsável por:
+ * - Gerenciar tokens de acesso e refresh.
+ * - Construir queries assinadas.
+ * - Enviar requisições GET/POST/PUT/DELETE.
+ */
 class HttpClient
 {
+    private const HEADER_REQUEST_ID   = 'X-Request-Id';
+    private const HEADER_ACCESS_TOKEN = 'x-tts-access-token';
+    private const STATUS_UNAUTHORIZED = 401;
+    private const STATUS_FORBIDDEN    = 403;
+
     private PendingRequest $http;
     private ?string $shopCipher = null;
     private string $baseUri;
@@ -32,103 +45,127 @@ class HttpClient
 
         $this->http = Http::baseUrl($this->baseUri)
             ->timeout($timeout)
-            ->withHeaders([
-                'X-Request-Id' => (string) Str::uuid(),
-            ]);
+            ->withHeaders([self::HEADER_REQUEST_ID => (string) Str::uuid()]);
     }
 
-    public function get(string $path, array $query = [])
+    public function get(string $uri, array $query = [])
+    {
+        $this->ensureFreshToken();
+        return $this->http->withToken($this->accessToken)->get($uri, $query);
+    }
+
+    public function post(string $uri, array $payload = [])
     {
         $this->ensureFreshToken();
 
-        return $this->http
-            ->withToken($this->accessToken)
-            ->get($path, $query);
-    }
-
-    public function post(string $path, array $payload = [])
-    {
-        $this->ensureFreshToken();
-
-        \Log::debug('Request TikTok', [
-            'access_token' => $this->accessToken,
+        \Log::debug('[TikTokShop] POST sem assinatura', [
+            'token'   => $this->accessToken,
             'payload' => $payload,
-            'headers' => $this->http->getOptions()
         ]);
 
         return $this->http
             ->withToken($this->accessToken)
             ->asJson()
-            ->post($path, $payload);
+            ->post($uri, $payload);
     }
 
-    public function postMultipart(string $path, array $parts = [])
+    public function getWithAuth(string $uri, array $queryParams = [], bool $omitShopCipher = false)
     {
+        return $this->requestWithAuth('get', $uri, [], $queryParams, false, $omitShopCipher);
+    }
+
+    public function postWithAuth(
+        string $uri,
+        array $body = [],
+        array $queryParams = [],
+        bool $omitShopCipher = false
+    ) {
+        return $this->requestWithAuth('post', $uri, $body, $queryParams, false, $omitShopCipher);
+    }
+
+    public function putWithAuth(string $uri, array $body = [], array $queryParams = [])
+    {
+        return $this->requestWithAuth('put', $uri, $body, $queryParams);
+    }
+
+    public function deleteWithAuth(
+        string $uri,
+        array $body = [],
+        array $queryParams = [],
+        bool $omitShopCipher = false
+    ) {
+        return $this->requestWithAuth('delete', $uri, $body, $queryParams, false, $omitShopCipher);
+    }
+
+    public function postMultipartWithAuth(string $uri, array $parts = [], array $queryParams = [])
+    {
+        return $this->requestWithAuth('post', $uri, $parts, $queryParams, true, true);
+    }
+
+    private function requestWithAuth(
+        string $method,
+        string $uri,
+        array $body = [],
+        array $queryParams = [],
+        bool $isMultipart = false,
+        bool $omitShopCipher = false
+    ) {
         $this->ensureFreshToken();
 
-        return $this->http
-            ->withToken($this->accessToken)
-            ->asMultipart()
-            ->post($path, $parts);
-    }
+        $query = $this->buildSignedQuery(
+            uri: $uri,
+            query: $queryParams,
+            body: $isMultipart ? [] : $body,
+            isMultipart: $isMultipart,
+            omitShopCipher: $omitShopCipher
+        );
 
-    private function sendWithRetry(string $method, string $path, array $data, bool $multipart = false)
-    {
-        try {
-            return $this->send($method, $path, $data, $multipart);
-        } catch (RequestException $e) {
-            if ($this->shouldTryRefresh($e)) {
-                $this->refreshTokenAndPersist();
-                return $this->send($method, $path, $data, $multipart);
-            }
+        $request = $this->http->withHeaders([self::HEADER_ACCESS_TOKEN => $this->accessToken])
+            ->withOptions(['query' => $query]);
 
-            throw $e;
-        }
-    }
-
-    private function send(string $method, string $path, array $data, bool $multipart = false)
-    {
-        if ($multipart) {
-            return $this->http->asMultipart()->{$method}($path, $data);
+        if ($isMultipart) {
+            return $request->asMultipart()->{$method}($uri, $body);
         }
 
-        if ($method === 'postJson') {
-            return $this->http->asJson()->post($path, $data);
+        if (in_array($method, ['post', 'put', 'delete'], true)) {
+            $request = $request->withBody(
+                json_encode($body, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                'application/json'
+            );
         }
 
-        return $this->http->{$method}($path, $data);
+        return $request->{$method}($uri);
     }
 
     private function ensureFreshToken(): void
     {
-        // se tiver repositório e clientHash, pegue as credenciais
-        if ($this->credsRepo && $this->clientHash) {
-            $cred = $this->credsRepo->findByClientHash($this->clientHash);
-
-            // sempre tenta popular shop_cipher
-            if ($cred && $cred->shop_cipher) {
-                $this->shopCipher = $cred->shop_cipher;
-            }
-
-            // popula access_token atual (mesmo sem refresh)
-            if ($cred && $cred->access_token) {
-                $this->accessToken = $cred->access_token;
-            }
-
-            // só tenta refresh se tiver token service + refresh_token
-            if ($cred && $this->tokens && $cred->refresh_token) {
-                $expiresAt = $cred->access_token_expires_at;
-                if ($expiresAt && now()->greaterThanOrEqualTo($expiresAt)) {
-                    $this->refreshTokenAndPersist();
-                }
-            }
+        if (!$this->credsRepo || !$this->clientHash) {
+            return;
         }
+
+        $cred = $this->credsRepo->findByClientHash($this->clientHash);
+        if (!$cred) {
+            return;
+        }
+
+        $this->shopCipher  = $cred->shop_cipher ?? $this->shopCipher;
+        $this->accessToken = $cred->access_token ?? $this->accessToken;
+
+        if ($this->shouldRefreshToken($cred)) {
+            $this->refreshTokenAndPersist();
+        }
+    }
+
+    private function shouldRefreshToken($cred): bool
+    {
+        return $cred->refresh_token && $this->tokens && $cred->access_token_expires_at
+            && now()->greaterThanOrEqualTo($cred->access_token_expires_at);
     }
 
     private function refreshTokenAndPersist(): void
     {
-        $cred = $this->credsRepo->findByClientHash($this->clientHash);
-        if (! $cred) {
+        $cred = $this->credsRepo?->findByClientHash($this->clientHash);
+        if (!$cred) {
             return;
         }
 
@@ -143,105 +180,48 @@ class HttpClient
         ]);
 
         $this->accessToken = $result->accessToken;
-
-        // garantir que continuamos com o shop_cipher carregado do banco
-        $this->shopCipher = $cred->shop_cipher ?: $this->shopCipher;
+        $this->shopCipher  = $cred->shop_cipher ?: $this->shopCipher;
     }
 
-    private function shouldTryRefresh(RequestException $e): bool
-    {
-        $status = $e->response?->status();
-        return in_array($status, [401, 403], true)
-            && $this->tokens && $this->credsRepo && $this->clientHash;
-    }
-
-    private function sign(array $params): array
-    {
-        unset($params['sign']);
-
-        // Apenas os parâmetros que vão na QUERY entram na assinatura:
-        $params['app_key']   = $this->appKey;
-        $params['timestamp'] = (string) now('UTC')->floorSecond()->timestamp;
-
-        // NUNCA adicionar access_token aqui.
-        // NUNCA adicionar parâmetros do BODY aqui.
-
-        $params['sign'] = \TikTokShop\Support\Signer::sign($params, $this->appSecret);
-
-        return $params;
-    }
-
-    public function postWithAuth(string $uri, array $json = [], array $queryParams = [])
-    {
-        $this->ensureFreshToken();
-
-        $query = $this->buildSignedQuery(
-            uri: $uri,
-            query: $queryParams,
-            body: $json,
-            isMultipart: false
-        );
-
-        return $this->http
-            ->withHeaders(['x-tts-access-token' => $this->accessToken])
-            ->withOptions(['query' => $query])
-            ->withBody(
-                json_encode($json, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
-                'application/json'
-            )
-            ->post($uri);
-    }
-
-    public function getWithAuth(string $uri, array $queryParams = []): \Illuminate\Http\Client\Response
-    {
-        $this->ensureFreshToken();
-
-        $query = $this->buildSignedQuery(
-            uri: $uri,
-            query: $queryParams,
-            body: [],
-            isMultipart: false
-        );
-
-        return $this->http
-            ->withHeaders(['x-tts-access-token' => $this->accessToken])
-            ->withOptions(['query' => $query])
-            ->get($uri);
-    }
-    private function buildUrl(string $uri): string
-    {
-        return $this->baseUri . '/' . ltrim($uri, '/');
-    }
-
-    private function buildSignedQuery(string $uri, array $query = [], array $body = [], bool $isMultipart = false): array
-    {
-        if ((empty($query['shop_cipher'])) && $this->shopCipher) {
+    private function buildSignedQuery(
+        string $uri,
+        array $query = [],
+        array $body = [],
+        bool $isMultipart = false,
+        bool $omitShopCipher = false
+    ): array {
+        if (!$omitShopCipher && empty($query['shop_cipher']) && $this->shopCipher) {
             $query['shop_cipher'] = $this->shopCipher;
         }
 
         $query['app_key']   = $this->appKey;
         $query['timestamp'] = (string) time();
 
-        $pathname = '/' . ltrim($uri, '/');
+        $query = $this->normalizeArrayParams($query);
 
-        $sign = Signer::signOpenApi(
+        $pathname = '/' . ltrim($uri, '/');
+        $sign     = Signer::signOpenApi(
             pathname: $pathname,
-            query:    $query,
-            body:     $body,
-            appSecret:$this->appSecret,
+            query: $query,
+            body: $body,
+            appSecret: $this->appSecret,
             isMultipart: $isMultipart
         );
 
         $query['sign'] = $sign;
 
-        \Log::debug('[TikTokShop][CreateProduct] Assinatura', [
-            'pathname' => $pathname,
-            'query'    => $query,
-            'body'     => $body,
-            'json'     => json_encode($body, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
-            'sign'     => $sign,
-        ]);
+        \Log::debug('[TikTokShop][HttpClient] Assinatura gerada', compact('pathname', 'query', 'body', 'sign'));
 
         return $query;
+    }
+
+    private function normalizeArrayParams(array $params): array
+    {
+        foreach ($params as $key => $value) {
+            if (is_array($value)) {
+                $params[$key] = json_encode($value, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+            }
+        }
+        return $params;
     }
 }
