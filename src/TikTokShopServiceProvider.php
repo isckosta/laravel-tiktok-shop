@@ -56,6 +56,8 @@ class TikTokShopServiceProvider extends ServiceProvider
 
         $this->loadRoutesFrom(__DIR__.'/../routes/tiktokshop.php');
 
+        $this->loadViewsFrom(__DIR__.'/../resources/views', 'tiktokshop');
+
         if ($this->app->runningInConsole()) {
             $this->commands([
                 AuthorizeCommand::class,
