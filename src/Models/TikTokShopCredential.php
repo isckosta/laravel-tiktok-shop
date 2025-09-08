@@ -11,6 +11,11 @@ class TikTokShopCredential extends Model
     protected $fillable = [
         'client_hash',
         'shop_cipher',
+        'shop_code',
+        'shop_id',
+        'shop_name',
+        'shop_region',
+        'shop_seller_type',
         'app_key',
         'app_secret',
         'access_token',
