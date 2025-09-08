@@ -1,11 +1,10 @@
 <?php
 
-namespace TikTokShop\Http\Clients;
+namespace TikTokShop\Http\Clients\Orders;
 
 use TikTokShop\Http\HttpClient;
-use Illuminate\Support\Facades\Log;
 
-class OrdersEndpoint
+class Orders
 {
     public function __construct(private HttpClient $http) {}
 
@@ -19,7 +18,7 @@ class OrdersEndpoint
             $query['cursor'] = $cursor;
         }
 
-        $body = $filters; // ex.: ['status' => 'CREATED']
+        $body = $filters;
 
         $resp = $this->http->postWithAuth('/order/202309/orders/search', $body, $query)->throw();
 
@@ -29,10 +28,10 @@ class OrdersEndpoint
     public function detail(string $orderId): array
     {
         $body = [
-            'order_id_list' => [$orderId], // ou 'order_id' dependendo do uso
+            'order_id_list' => [$orderId],
         ];
 
-        $query = []; // shop_cipher será injetado pelo HttpClient
+        $query = [];
 
         $resp = $this->http->postWithAuth('/order/202309/orders/detail/query', $body, $query)->throw();
 
