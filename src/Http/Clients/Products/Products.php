@@ -314,4 +314,9 @@ class Products
     {
         return new GetProductsSeoWords($this->http);
     }
+
+    public function suggestions(): ProductSuggestions
+    {
+        return new ProductSuggestions($this->http);
+    }
 }
