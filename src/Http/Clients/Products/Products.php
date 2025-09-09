@@ -4,6 +4,7 @@ namespace TikTokShop\Http\Clients\Products;
 
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Log;
+use TikTokShop\Http\Clients\Images\OptimizeProductImage;
 use TikTokShop\Http\Clients\Webhooks\UpdateShopWebhook;
 use TikTokShop\Http\HttpClient;
 use TikTokShop\Support\ResponseFormatter;
@@ -318,5 +319,10 @@ class Products
     public function suggestions(): ProductSuggestions
     {
         return new ProductSuggestions($this->http);
+    }
+
+    public function optimizeImages(): OptimizeProductImage
+    {
+        return new OptimizeProductImage($this->http);
     }
 }
