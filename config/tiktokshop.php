@@ -196,4 +196,17 @@ return [
         'enabled'  => env('TTSHOP_NOTIFICATIONS_ENABLED', false),
         'channels' => explode(',', env('TTSHOP_NOTIFICATIONS_CHANNELS', 'slack')),
     ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Enable Default Routes
+    |--------------------------------------------------------------------------
+    |
+    | Define se as rotas padrão (authorize, callback, webhook) devem ser
+    | carregadas automaticamente pelo package.
+    |
+    | true  -> Rotas são registradas automaticamente
+    | false -> Você deve criar suas próprias rotas manualmente
+    */
+    'enable_default_routes' => env('TTSHOP_ENABLE_DEFAULT_ROUTES', true),
 ];

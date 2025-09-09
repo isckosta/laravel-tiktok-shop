@@ -1,12 +1,12 @@
 <?php
 
-namespace TikTokShop\Auth;
+namespace TikTokShop\Http\Controllers\Stubs;
 
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use TikTokShop\Services\AuthorizationService;
 
-class AuthorizationController extends Controller
+class TikTokShopAuthController extends Controller
 {
     public function __construct(private AuthorizationService $authService)
     {

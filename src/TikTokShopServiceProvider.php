@@ -54,7 +54,23 @@ class TikTokShopServiceProvider extends ServiceProvider
             ], 'tiktokshop-migrations');
         }
 
-        $this->loadRoutesFrom(__DIR__.'/../routes/tiktokshop.php');
+        $this->publishes([
+            __DIR__.'/Http/Controllers/Stubs/TikTokOAuthController.php' => app_path('Http/Controllers/TikTokOAuthController.php'),
+//            __DIR__.'/Http/Controllers/Stubs/TikTokWebhookController.php' => app_path('Http/Controllers/TikTokWebhookController.php'),
+        ], 'tiktokshop-controllers');
+
+        $this->publishes([
+            __DIR__.'/../routes/tiktokshop.php' => base_path('routes/tiktokshop.php'),
+        ], 'tiktokshop-routes');
+
+        $publishedRoutes = base_path('routes/tiktokshop.php');
+        if (config('tiktokshop.enable_default_routes')) {
+            if (file_exists($publishedRoutes)) {
+                $this->loadRoutesFrom($publishedRoutes);
+            } else {
+                $this->loadRoutesFrom(__DIR__.'/../routes/tiktokshop.php');
+            }
+        }
 
         $this->loadViewsFrom(__DIR__.'/../resources/views', 'tiktokshop');
 
