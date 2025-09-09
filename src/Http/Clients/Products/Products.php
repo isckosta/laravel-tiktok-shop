@@ -325,4 +325,9 @@ class Products
     {
         return new OptimizeProductImage($this->http);
     }
+
+    public function globalCategories(): GlobalCategories
+    {
+        return new GlobalCategories($this->http);
+    }
 }
