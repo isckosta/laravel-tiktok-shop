@@ -1,8 +1,17 @@
 {
     "name": "isckosta/laravel-tiktok-shop",
     "description": "Laravel integration for TikTok Shop (multi-tenant, webhooks, DTOs, retries).",
+    "keywords": ["laravel", "tiktok", "tiktok-shop", "ecommerce", "integration"],
     "type": "library",
     "license": "MIT",
+    "authors": [
+        {
+            "name": "Israel Costa",
+            "email": "isckosta@live.com",
+            "homepage": "https://github.com/isckosta",
+            "role": "Developer"
+        }
+    ],
     "require": {
       "php": "^8.3",
       "illuminate/support": "^11.0|^12.0",
