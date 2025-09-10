@@ -1,8 +1,3 @@
-Perfeito, Israel 👌
-Aqui está o **README ajustado** com tudo integrado: rotas, flag `enable_default_routes`, publicação de controllers, publicação de rotas, comandos Artisan e organização atualizada.
-
----
-
 # Laravel TikTok Shop
 
 Integração robusta e extensível com a **API da TikTok Shop**, construída para aplicações Laravel.
